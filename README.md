@@ -13,7 +13,8 @@ bm -d,--delete <bookmark> - Delete bookmark 'bookmark'
 bm -l,--list              - Show available bookmarks
 bm -h,--help              - Show usage information
 bm -v,--version           - Show version
+bm -c,--completion [path] - Generate bash completion script
 
-bm v1.2
+bm v1.3
 by PhateValleyman
 Jonas.Ned@outlook.com

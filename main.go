@@ -2,16 +2,13 @@ package main
 
 import (
 	"bufio"
-//	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-//	"os/user"
 	"path/filepath"
 	"strings"
 )
 
-// Constants for color codes
 const (
 	Red    = "\033[01;31m"
 	Green  = "\033[01;32m"
@@ -21,7 +18,6 @@ const (
 	None   = "\033[0m"
 )
 
-// Bookmarks file path
 var bookmarksFile string
 
 func init() {
@@ -41,7 +37,6 @@ func init() {
 	}
 }
 
-// Main function to handle commands
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
@@ -83,6 +78,20 @@ func main() {
 		printUsage()
 	case "-v", "--version":
 		printVersion()
+	case "-c", "--completion":
+		if len(os.Args) == 2 {
+			fmt.Println(generateCompletionScript())
+		} else if len(os.Args) == 3 {
+			err := saveCompletionScript(os.Args[2])
+			if err != nil {
+				fmt.Println("Error saving completion script:", err)
+			} else {
+				fmt.Println("Completion script saved to", os.Args[2])
+			}
+		} else {
+			fmt.Println("Invalid usage of the completion option.")
+			printUsage()
+		}
 	default:
 		if len(os.Args[1]) > 0 {
 			goToBookmark(os.Args[1])
@@ -92,7 +101,6 @@ func main() {
 	}
 }
 
-// Print usage information
 func printUsage() {
 	fmt.Printf("Usage: %sbm%s [%soption%s] <%sbookmark%s>\n", Red, None, Green, None, Yellow, None)
 	fmt.Println(" ")
@@ -107,19 +115,16 @@ func printUsage() {
 	fmt.Println(" ")
 	fmt.Printf("%sbm%s %s-h%s,%s--help%s              - %sShow usage information%s\n", Red, None, Green, None, Green, None, Blue, None)
 	fmt.Printf("%sbm%s %s-v%s,%s--version%s           - %sShow version%s\n", Red, None, Green, None, Green, None, Blue, None)
+	fmt.Printf("%sbm%s %s-c%s,%s--completion%s [%spath%s] - %sGenerate bash completion script%s\n", Red, None, Green, None, Green, None, Yellow, None, Blue, None)
 	fmt.Println(" ")
 }
 
-// Print version information
 func printVersion() {
-	fmt.Println(" ")
-	fmt.Println("bm v1.2")
+	fmt.Println("bm v1.3")
 	fmt.Println("by PhateValleyman")
 	fmt.Println("Jonas.Ned@outlook.com")
-	fmt.Println(" ")
 }
 
-// Save the current directory to bookmarks
 func addBookmark(name string) {
 	if !isValidBookmarkName(name) {
 		fmt.Println("Invalid bookmark name")
@@ -141,7 +146,6 @@ func addBookmark(name string) {
 	}
 }
 
-// Delete a bookmark
 func deleteBookmark(name string) {
 	if !isValidBookmarkName(name) {
 		fmt.Println("Invalid bookmark name")
@@ -158,7 +162,6 @@ func deleteBookmark(name string) {
 	}
 }
 
-// Jump to a bookmark
 func goToBookmark(name string) {
 	bookmarks, err := readBookmarks()
 	if err != nil {
@@ -187,7 +190,6 @@ func goToBookmark(name string) {
 	}
 }
 
-// Print a bookmark
 func printBookmark(name string) {
 	bookmarks, err := readBookmarks()
 	if err != nil {
@@ -202,7 +204,6 @@ func printBookmark(name string) {
 	fmt.Println(dir)
 }
 
-// List bookmarks with directory names
 func listBookmarks() {
 	bookmarks, err := readBookmarks()
 	if err != nil {
@@ -216,7 +217,6 @@ func listBookmarks() {
 	}
 }
 
-// Validate bookmark name
 func isValidBookmarkName(name string) bool {
 	if name == "" {
 		return false
@@ -229,7 +229,6 @@ func isValidBookmarkName(name string) bool {
 	return true
 }
 
-// Read bookmarks from file
 func readBookmarks() (map[string]string, error) {
 	file, err := os.Open(bookmarksFile)
 	if err != nil {
@@ -256,7 +255,6 @@ func readBookmarks() (map[string]string, error) {
 	return bookmarks, nil
 }
 
-// Write bookmarks to file
 func writeBookmarks(bookmarks map[string]string) error {
 	file, err := os.Create(bookmarksFile)
 	if err != nil {
@@ -271,4 +269,40 @@ func writeBookmarks(bookmarks map[string]string) error {
 		}
 	}
 	return writer.Flush()
+}
+
+// Generates the bash completion script
+func generateCompletionScript() string {
+	return `_bm() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    opts="-a --add -d --delete -g --go -p --print -l --list -h --help -v --version -c --completion"
+
+    case "${prev}" in
+        -g|--go|-d|--delete|-p|--print)
+            local bookmarks=$(awk -F '=' '/^export DIR_/ {gsub(/^export DIR_/, "", $1); print $1}' "` + bookmarksFile + `")
+            COMPREPLY=( $(compgen -W "${bookmarks}" -- ${cur}) )
+            return 0
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+    return 0
+}
+complete -F _bm bm`
+}
+
+// Saves the bash completion script to a specified file
+func saveCompletionScript(path string) error {
+	script := generateCompletionScript()
+	file, err := os.Create(filepath.Join(path, "bm.bash"))
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(script)
+	return err
 }
