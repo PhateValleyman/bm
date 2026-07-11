@@ -1,234 +1,146 @@
 #!/ffp/bin/bash
 
-# /ffp/etc/profile.d/bm.sh
+# bm - Bookmark Manager v1.4
+# Optimized and structured for future Golang conversion
 
-# bm - Bookmark Manager function
-# This function provides quick access to saved directories
+# --- Configuration ---
+_BM_SDIRS="${SDIRS:-}"
+_BM_PREFIX="${PREFIX:-/ffp}"
+_BM_FILE="${_BM_SDIRS:-${_BM_PREFIX}/etc/sdirs}"
 
-# Color codes
-RED='\033[01;31m'
-GREEN='\033[01;32m'
-BLUE='\033[01;34m'
-YELLOW='\033[01;33m'
-CYAN='\033[01;36m'
-NONE='\033[0m'
+# --- Colors ---
+_BM_C_RED='\033[01;31m'
+_BM_C_GREEN='\033[01;32m'
+_BM_C_BLUE='\033[01;34m'
+_BM_C_YELLOW='\033[01;33m'
+_BM_C_CYAN='\033[01;36m'
+_BM_C_NONE='\033[0m'
 
-# Determine bookmarks file location
-SDIRS="${SDIRS:-}"
-PREFIX="${PREFIX:-/ffp}"
-BOOKMARKS_FILE="${SDIRS:-${PREFIX}/etc/sdirs}"
-
-# Ensure bookmarks file exists
-mkdir -p "$(dirname "$BOOKMARKS_FILE")"
-touch "$BOOKMARKS_FILE"
+# Ensure environment is ready
+[[ ! -d "$(dirname "$_BM_FILE")" ]] && mkdir -p "$(dirname "$_BM_FILE")"
+[[ ! -f "$_BM_FILE" ]] && touch "$_BM_FILE"
 
 bm() {
+	# Local state (Analogous to Go map[string]string)
+	local -A _bookmarks
+	local _modified=0
 
-    # Print usage information
-    print_usage() {
-        echo -e "Usage: ${RED}bm${NONE} [${GREEN}option${NONE}] <${YELLOW}bookmark${NONE}>"
-        echo " "
-        echo "Quick access to saved directories"
-        echo " "
-        echo -e "${RED}bm${NONE} <${YELLOW}bookmark${NONE}>             - ${BLUE}Go to directory${NONE} '${YELLOW}bookmark${NONE}'"
-        echo -e "${RED}bm${NONE} ${GREEN}-a${NONE},${GREEN}--add${NONE} <${YELLOW}bookmark${NONE}>    - ${BLUE}Add bookmark${NONE} '${YELLOW}bookmark${NONE}'"
-        echo -e "${RED}bm${NONE} ${GREEN}-g${NONE},${GREEN}--go${NONE} <${YELLOW}bookmark${NONE}>     - ${BLUE}Go to directory${NONE} '${YELLOW}bookmark${NONE}'"
-        echo -e "${RED}bm${NONE} ${GREEN}-p${NONE},${GREEN}--print${NONE} <${YELLOW}bookmark${NONE}>  - ${BLUE}Show directory${NONE} '${YELLOW}bookmark${NONE}'"
-        echo -e "${RED}bm${NONE} ${GREEN}-d${NONE},${GREEN}--delete${NONE} <${YELLOW}bookmark${NONE}> - ${BLUE}Delete bookmark${NONE} '${YELLOW}bookmark${NONE}'"
-        echo -e "${RED}bm${NONE} ${GREEN}-l${NONE},${GREEN}--list${NONE}              - ${BLUE}Show available bookmarks${NONE}"
-        echo -e "${RED}bm${NONE} ${GREEN}-h${NONE},${GREEN}--help${NONE}              - ${BLUE}Show usage information${NONE}"
-        echo -e "${RED}bm${NONE} ${GREEN}-v${NONE},${GREEN}--version${NONE}           - ${BLUE}Show version${NONE}"
-        echo -e "${RED}bm${NONE} ${GREEN}-c${NONE},${GREEN}--completion${NONE}        - ${BLUE}Generate bash completion script${NONE}"
-        echo " "
-    }
+	# --- Internal Logic ---
 
-    # Print version information
-    print_version() {
-        echo "bm v1.3"
-        echo "by PhateValleyman"
-        echo "Jonas.Ned@outlook.com"
-    }
+	# Load bookmarks into memory
+	_bm_load() {
+		while IFS= read -r line; do
+			if [[ "$line" =~ ^export\ DIR_([^=]+)=\"(.*)\"$ ]]; then
+				_bookmarks["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+			fi
+		done < "$_BM_FILE"
+	}
 
-    # Validate bookmark name
-    isValidBookmarkName() {
-        local name="$1"
+	# Save bookmarks to disk (Atomic write)
+	_bm_save() {
+		local tmp_file="${_BM_FILE}.tmp"
+		: > "$tmp_file"
+		local name
+		for name in "${!_bookmarks[@]}"; do
+			printf 'export DIR_%s="%s"\n' "$name" "${_bookmarks[$name]}" >> "$tmp_file"
+		done
+		mv "$tmp_file" "$_BM_FILE"
+	}
 
-        if [[ -z "$name" ]]; then
-            return 1
-        fi
+	_bm_is_valid() { [[ "$1" =~ ^[a-zA-Z0-9_]+$ ]]; }
 
-        if [[ ! "$name" =~ ^[a-zA-Z0-9_]+$ ]]; then
-            return 1
-        fi
+	# --- Commands ---
 
-        return 0
-    }
+	_bm_list() {
+		echo -e "     ${_BM_C_GREEN}Saved bookmarks${_BM_C_NONE}:"
+		echo ""
+		local name
+		# Sort names for consistent output
+		local sorted_names
+		sorted_names=$(printf '%s\n' "${!_bookmarks[@]}" | sort)
+		
+		for name in $sorted_names; do
+			[[ -z "$name" ]] && continue
+			printf "  ${_BM_C_YELLOW}%-20s${_BM_C_NONE} %s\n" "$name" "${_bookmarks[$name]}"
+		done
+	}
 
-    # Read bookmarks from file
-    readBookmarks() {
-        while IFS= read -r line; do
-            if [[ "$line" =~ ^export\ DIR_([^=]+)=\"(.*)\"$ ]]; then
-                echo "${BASH_REMATCH[1]}:${BASH_REMATCH[2]}"
-            fi
-        done < "$BOOKMARKS_FILE"
-    }
+	_bm_usage() {
+		echo -e "Usage: ${_BM_C_RED}bm${_BM_C_NONE} [${_BM_C_GREEN}option${_BM_C_NONE}] <${_BM_C_YELLOW}bookmark${_BM_C_NONE}>"
+		echo -e "\nOptions:"
+		echo -e "  ${_BM_C_GREEN}-a${_BM_C_NONE},${_BM_C_GREEN} --add${_BM_C_NONE}    <${_BM_C_YELLOW}name${_BM_C_NONE}>  Add current directory"
+		echo -e "  ${_BM_C_GREEN}-d${_BM_C_NONE},${_BM_C_GREEN} --delete${_BM_C_NONE} <${_BM_C_YELLOW}name${_BM_C_NONE}>  Remove bookmark"
+		echo -e "  ${_BM_C_GREEN}-l${_BM_C_NONE},${_BM_C_GREEN} --list${_BM_C_NONE}           List all bookmarks"
+		echo -e "  ${_BM_C_GREEN}-p${_BM_C_NONE},${_BM_C_GREEN} --print${_BM_C_NONE}  <${_BM_C_YELLOW}name${_BM_C_NONE}>  Show path"
+		echo -e "  ${_BM_C_GREEN}-c${_BM_C_NONE},${_BM_C_GREEN} --completion${_BM_C_NONE}     Generate completion script"
+		echo -e "  ${_BM_C_GREEN}-v${_BM_C_NONE},${_BM_C_GREEN} --version${_BM_C_NONE}        Show version"
+		echo -e "  ${_BM_C_GREEN}-h${_BM_C_NONE},${_BM_C_GREEN} --help${_BM_C_NONE}           Show this help"
+	}
 
-    # Write bookmarks to file
-    writeBookmarks() {
-        local bookmarksStr="$1"
-        > "$BOOKMARKS_FILE"
+	# --- Main Dispatcher ---
 
-        declare -A bookmarks
+	_bm_load
 
-        while IFS= read -r line; do
-            if [[ "$line" =~ ^([^:]+):(.*)$ ]]; then
-                bookmarks["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
-            fi
-        done <<< "$bookmarksStr"
-
-        for name in "${!bookmarks[@]}"; do
-            echo "export DIR_${name}=\"${bookmarks[$name]}\"" >> "$BOOKMARKS_FILE"
-        done
-    }
-
-    # Add a bookmark
-    addBookmark() {
-        local name="$1"
-
-        if ! isValidBookmarkName "$name"; then
-            echo -e "${RED}Invalid bookmark name${NONE}"
-            return 1
-        fi
-
-        local curDir="$(pwd)"
-        local bookmarksStr="$(readBookmarks)"
-
-        if grep -q "^$name:" <<< "$bookmarksStr"; then
-            echo -e "${YELLOW}Bookmark '$name' already exists, updating...${NONE}"
-            bookmarksStr="$(grep -v "^$name:" <<< "$bookmarksStr")"
-        fi
-
-        bookmarksStr+=$'\n'"$name:$curDir"
-        writeBookmarks "$bookmarksStr"
-    }
-
-    # Delete a bookmark
-    deleteBookmark() {
-        local name="$1"
-
-        if ! isValidBookmarkName "$name"; then
-            echo -e "${RED}Invalid bookmark name${NONE}"
-            return 1
-        fi
-
-        local bookmarksStr="$(readBookmarks)"
-
-        if ! grep -q "^$name:" <<< "$bookmarksStr"; then
-            echo -e "${RED}Bookmark '${name}' does not exist${NONE}"
-            return 1
-        fi
-
-        bookmarksStr="$(grep -v "^$name:" <<< "$bookmarksStr")"
-        writeBookmarks "$bookmarksStr"
-    }
-
-    # Go to a bookmarked directory
-    goToBookmark() {
-        local name="$1"
-        local bookmarksStr="$(readBookmarks)"
-
-        local dir="$(grep "^$name:" <<< "$bookmarksStr" | cut -d: -f2-)"
-
-        if [[ -z "$dir" ]]; then
-            echo -e "${RED}WARNING: Bookmark '${name}' does not exist${NONE}"
-            return 1
-        fi
-
-        if [[ ! -d "$dir" ]]; then
-            echo -e "${RED}WARNING: Directory '${dir}' does not exist${NONE}"
-            return 1
-        fi
-
-        cd "$dir"
-        echo "Changed to directory: $dir"
-    }
-
-    # Print a bookmarked directory
-    printBookmark() {
-        local name="$1"
-        local bookmarksStr="$(readBookmarks)"
-
-        local dir="$(grep "^$name:" <<< "$bookmarksStr" | cut -d: -f2-)"
-
-        if [[ -z "$dir" ]]; then
-            echo -e "${RED}Bookmark '${name}' does not exist${NONE}"
-            return 1
-        fi
-
-        echo "$dir"
-    }
-
-    # List all bookmarks
-    listBookmarks() {
-        local bookmarksStr="$(readBookmarks)"
-
-        echo -e "     ${GREEN}Saved bookmarks${NONE}:"
-        echo " "
-
-        while IFS= read -r line; do
-            [[ -z "$line" ]] && continue
-            local name="${line%%:*}"
-            local path="${line#*:}"
-            printf "${YELLOW}%-20s${NONE} %s\n" "$name" "$path"
-        done <<< "$(echo "$bookmarksStr" | sort)"
-    }
-
-    # Generate completion script (FIXED)
-    generateCompletionScript() {
-        cat << 'EOF'
-_bm() {
-    # Current word
-    cur="${COMP_WORDS[COMP_CWORD]}"
-
-    # Previous word
-    prev="${COMP_WORDS[COMP_CWORD-1]}"
-
-    # Options
-    opts="-a --add -d --delete -g --go -p --print -l --list -h --help -v --version -c --completion"
-
-    # Bookmarks file
-    bookmarks_file="${SDIRS:-${PREFIX:-/ffp}/etc/sdirs}"
-
-    # Load bookmark names only (NO PATHS)
-    bookmarks=()
-    if [[ -f "$bookmarks_file" ]]; then
-        while IFS= read -r line; do
-            [[ "$line" =~ ^export\ DIR_([^=]+)= ]] && bookmarks+=("${BASH_REMATCH[1]}")
-        done < "$bookmarks_file"
-    fi
-
-    case "$prev" in
-        -a|--add|-d|--delete|-g|--go|-p|--print)
-            COMPREPLY=( $(compgen -W "${bookmarks[*]}" -- "$cur") )
-            ;;
-        *)
-            COMPREPLY=( $(compgen -W "$opts ${bookmarks[*]}" -- "$cur") )
-            ;;
-    esac
+	case "$1" in
+		-a|--add)
+			local name="$2"
+			if _bm_is_valid "$name"; then
+				_bookmarks["$name"]="$(pwd)"
+				_modified=1
+				echo -e "${_BM_C_BLUE}Added:${_BM_C_NONE} $name -> $(pwd)"
+			else
+				echo -e "${_BM_C_RED}Error:${_BM_C_NONE} Invalid name (use a-z, 0-9, _)"
+				return 1
+			fi
+			;;
+		-d|--delete)
+			if [[ -n "${_bookmarks[$2]}" ]]; then
+				unset "_bookmarks[$2]"
+				_modified=1
+				echo -e "${_BM_C_RED}Deleted:${_BM_C_NONE} $2"
+			else
+				echo -e "${_BM_C_RED}Error:${_BM_C_NONE} Bookmark '$2' not found"
+				return 1
+			fi
+			;;
+		-l|--list) _bm_list ;;
+		-p|--print)
+			if [[ -n "${_bookmarks[$2]}" ]]; then
+				echo "${_bookmarks[$2]}"
+			else
+				echo -e "${_BM_C_RED}Error:${_BM_C_NONE} Bookmark '$2' not found"
+				return 1
+			fi
+			;;
+		-c|--completion)
+			cat << 'EOF'
+_bm_completion() {
+	local cur="${COMP_WORDS[COMP_CWORD]}"
+	local opts="-a --add -d --delete -l --list -p --print -h --help -c --completion -v --version"
+	local bookmarks_file="${SDIRS:-${PREFIX:-/ffp}/etc/sdirs}"
+	local bookmarks=""
+	if [[ -f "$bookmarks_file" ]]; then
+		bookmarks=$(grep -oP '(?<=export DIR_)[^=]+' "$bookmarks_file" 2>/dev/null)
+	fi
+	COMPREPLY=( $(compgen -W "$opts $bookmarks" -- "$cur") )
 }
-complete -F _bm bm
+complete -F _bm_completion bm
 EOF
-    }
+			;;
+		-v|--version) echo "bm v1.4 (Pre-Go)" ;;
+		-h|--help|"") _bm_usage ;;
+		*)
+			local target="${_bookmarks[$1]}"
+			if [[ -d "$target" ]]; then
+				cd "$target" || return 1
+				echo -e "${_BM_C_BLUE}Jumped to:${_BM_C_NONE} $target"
+			else
+				echo -e "${_BM_C_RED}Error:${_BM_C_NONE} Bookmark '$1' invalid or directory missing"
+				return 1
+			fi
+			;;
+	esac
 
-    case "$1" in
-        -a|--add) [[ -n "$2" ]] && addBookmark "$2" ;;
-        -d|--delete) [[ -n "$2" ]] && deleteBookmark "$2" ;;
-        -g|--go) [[ -n "$2" ]] && goToBookmark "$2" ;;
-        -p|--print) [[ -n "$2" ]] && printBookmark "$2" ;;
-        -l|--list) listBookmarks ;;
-        -v|--version) print_version ;;
-        -c|--completion) generateCompletionScript ;;
-        -h|--help|"") print_usage ;;
-        *) goToBookmark "$1" ;;
-    esac
+	# Sync back to disk if modified
+	[[ $_modified -eq 1 ]] && _bm_save
 }
