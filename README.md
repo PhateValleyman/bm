@@ -1,14 +1,16 @@
-# bm - Bookmark Manager
+# bm - Bookmark Manager (Go Version)
 
-A lightweight bash function for quick access to frequently used directories. Save, navigate to, and manage directory bookmarks with ease.
+A high-performance Go implementation of the Bookmark Manager.
 
-**Version:** 1.3
+**Version:** 2.0 (Golang)
 **Author:** PhateValleyman | **Email:** Jonas.Ned@outlook.com
 
 ---
 
 ## Overview
-`bm` is a simple yet powerful directory bookmark manager that integrates seamlessly into your bash shell. Instead of typing long paths or using `cd` repeatedly, create bookmarks for your favorite directories and jump to them instantly.
+`bm` is a fast and efficient directory bookmark manager written in Go. It allows you to save, navigate to, and manage directory bookmarks with ease.
+
+This version is a complete rewrite of the original Bash script, offering better performance and extensibility.
 
 ---
 
