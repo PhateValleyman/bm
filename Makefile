@@ -1,52 +1,15 @@
-# Makefile for bm - Bookmark Manager
+BINARY_NAME=bm
+GO_VERSION=1.19
 
-.DEFAULT_GOAL := help
+.PHONY: all build redmi server
 
-# Colors
-RED    := \033[0;31m
-GREEN  := \033[0;32m
-YELLOW := \033[0;33m
-BLUE   := \033[0;34m
-NC     := \033[0m
+all: build redmi server
 
-# Installation paths
-SERVER_PATH := /ffp/etc/profile.d
-TERMUX_PATH := /data/data/com.termux/files/usr/etc/profile.d
-DEFAULT_PATH := $(PREFIX)/etc/profile.d
+build:
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.19 go build -x -trimpath -ldflags="-s -w" -o ./bin/bm_codespace ./cmd/bm
 
-.PHONY: help server termux default
-
-help:
-	@echo -e "${BLUE}bm - Bookmark Manager Makefile${NC}"
-	@echo -e "Usage: ${GREEN}make${NC} [${YELLOW}target${NC}]"
-	@echo ""
-	@echo -e "Available targets:"
-	@echo -e "  ${YELLOW}help${NC}    - Show this colored help message (default)"
-	@echo -e "  ${YELLOW}server${NC}  - Install to ${BLUE}$(SERVER_PATH)/bm.bash${NC}"
-	@echo -e "  ${YELLOW}termux${NC}  - Install to ${BLUE}$(TERMUX_PATH)/bm.bash${NC}"
-	@echo -e "  ${YELLOW}default${NC} - Install to ${BLUE}$(DEFAULT_PATH)/bm.bash${NC} (Uses \$$PREFIX)"
+redmi:
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.19 GOOS=android GOARCH=arm64 go build -x -trimpath -ldflags="-s -w" -o ./bin/bm_redmi ./cmd/bm
 
 server:
-	@echo -e "${YELLOW}Installing to server path...${NC}"
-	@mkdir -p $(SERVER_PATH)
-	@cp bm.bash $(SERVER_PATH)/bm.bash
-	@chmod 755 $(SERVER_PATH)/bm.bash
-	@echo -e "${GREEN}Success!${NC} Please run: ${YELLOW}source $(SERVER_PATH)/bm.bash${NC}"
-
-termux:
-	@echo -e "${YELLOW}Installing to Termux path...${NC}"
-	@mkdir -p $(TERMUX_PATH)
-	@cp bm.bash $(TERMUX_PATH)/bm.bash
-	@chmod 755 $(TERMUX_PATH)/bm.bash
-	@echo -e "${GREEN}Success!${NC} Please run: ${YELLOW}source $(TERMUX_PATH)/bm.bash${NC}"
-
-default:
-	@if [ -z "$(PREFIX)" ]; then \
-		echo -e "${RED}Error: \$$PREFIX is not defined.${NC}"; \
-		exit 1; \
-	fi
-	@echo -e "${YELLOW}Installing to default path ($(PREFIX))...${NC}"
-	@mkdir -p $(DEFAULT_PATH)
-	@cp bm.bash $(DEFAULT_PATH)/bm.bash
-	@chmod 755 $(DEFAULT_PATH)/bm.bash
-	@echo -e "${GREEN}Success!${NC} Please run: ${YELLOW}source $(DEFAULT_PATH)/bm.bash${NC}"
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.19 GOOS=linux GOARCH=arm GOARM=5 go build -x -trimpath -ldflags="-s -w" -o ./bin/bm_server ./cmd/bm
